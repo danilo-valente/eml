@@ -1,0 +1,43 @@
+Date: Wed, 29 Jan 2014 11:10:06 +0100
+To: "Foo Bar" <foo.bar@example.com>
+From: Online Shop <no-reply@example.com>
+Subject: Winter promotions
+Content-Type: multipart/related; type="text/html";
+	boundary="__1__"
+MIME-Version: 1.0
+
+--__1__
+Content-Type: multipart/alternative;
+	boundary="__999__"
+
+--__999__
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+x-some-header: text
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.=0D=0A
+
+--__999__
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+x-some-header: html
+
+=09<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+
+--__999__--
+
+--__1__
+Content-Type: text/plain; name="plain-file-1.txt"
+Content-Disposition: attachment; filename="plain-file-1.txt"
+x-some-header: attachment-1
+
+This is the contents of attachment 1.
+
+--__1__
+Content-Type: text/plain; name="plain-file-2.txt"
+Content-Disposition: attachment; filename="plain-file-2.txt"
+x-some-header: attachment-2
+
+This is the contents of attachment 2.
+
+--__1__--
