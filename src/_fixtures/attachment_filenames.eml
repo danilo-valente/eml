@@ -1,0 +1,69 @@
+From: Foo Bar <foo.bar@example.com>
+Subject: Attachment Filenames
+To: foo.bar@example.com
+Date: Sun, 29 Apr 2018 14:05:09 -0400
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101
+ Thunderbird/52.7.0
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+ boundary="------------194F0B6C07FF2414138ED9B2"
+Content-Language: en-US
+
+This is a multi-part message in MIME format.
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain; charset=utf-8; format=flowed
+Content-Transfer-Encoding: 7bit
+
+please see attached
+
+
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain;
+ name*0="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345.t"; name*1=xt
+Content-Disposition: attachment;
+ filename*0="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345.t"; filename*1=xt
+
+long filename split into parts
+
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain
+Content-Disposition: attachment;
+	filename="=?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
+ =?gb2312?B?zsTX1i50eHQ=?="; size=1548;
+	creation-date="Thu, 26 Dec 2024 04:31:07 GMT";
+	modification-date="Thu, 26 Dec 2024 04:31:20 GMT"
+
+long filename in base64-encoded GB2312 charset
+
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain;
+ name="a.txt"
+Content-Disposition: attachment
+
+fall back to `name` if no `filename`
+
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain;
+ name="a.txt"
+Content-Disposition: attachment;
+ filename="b.txt"
+
+prefer `filename` over `name`
+
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain;
+ name="a.txt"
+Content-Disposition: attachment;
+ filename*0="b.t"; filename*1="xt"; filename="c.txt"
+
+prefer `filename` over `filename*0..n`
+
+--------------194F0B6C07FF2414138ED9B2--

@@ -1,26 +1,38 @@
 import { decodeBase64 } from '@std/encoding/base64'
 
-export function decodeQuotedPrintable(str: string) {
-	return str.replaceAll(/=\?(?<charset>[a-z0-9\-]+)\?(?<encoding>[bq]+)\?(?<content>.+)\?=/gi, (...args) => {
-		const groups = args[args.findIndex((x) => typeof x === 'number') + 2]
-		const { charset, encoding, content } = groups
+type QuotedPrintableProps = {
+	encoding: 'B' | 'Q'
+	charset?: string
+	content: string
+}
 
-		switch (encoding.toLowerCase() as 'b' | 'q') {
-			case 'b': {
-				const decoder = new TextDecoder(charset)
-				return decoder.decode(decodeBase64(content))
-			}
-			case 'q': {
-				const decoder = new TextDecoder(charset)
-				return decoder.decode(Uint8Array.from(
-					[...content.matchAll(/=\p{AHex}{2}|./gu)].flat(),
-					(s) => {
-						if (s === '_') return 0x20
-						if (s.startsWith('=')) return parseInt(s.slice(1), 16)
-						return s.codePointAt(0)!
-					},
-				))
-			}
+export function decodeQuotedPrintableContent({ charset, encoding, content }: QuotedPrintableProps) {
+	content = content.replaceAll(/=\r?\n/g, '')
+
+	switch (encoding.toUpperCase() as 'B' | 'Q') {
+		case 'B': {
+			const decoder = new TextDecoder(charset)
+			return decoder.decode(decodeBase64(content))
 		}
-	})
+		case 'Q': {
+			const decoder = new TextDecoder(charset)
+			return decoder.decode(Uint8Array.from(
+				[...content.matchAll(/(?<hex>[=]\p{AHex}{2}(?:\r?\n)?)|./gsu)],
+				(x) => {
+					const [s] = x
+					return x.groups!.hex ? parseInt(s.slice(1), 16) : s === '_' ? 0x20 : s.codePointAt(0)!
+				},
+			))
+		}
+	}
+}
+
+export function decodeQuotedPrintable(str: string) {
+	return str.replaceAll(
+		/=\?(?<charset>[a-z0-9\-]+)\?(?<encoding>[bq]+)\?(?<content>.+)\?=(?:\r?\n\s*)?/gi,
+		(...args) => {
+			const groups = args[args.findIndex((x) => typeof x === 'number') + 2]
+			return decodeQuotedPrintableContent(groups)
+		},
+	)
 }

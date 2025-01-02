@@ -5,29 +5,39 @@ import { decodeQuotedPrintable } from './quotedPrintable.ts'
 const STATUS = Symbol('status')
 const PARENT = Symbol('parent')
 
-type Headers = Record<Lowercase<string>, string>
+type Headers = Partial<Record<Lowercase<string>, string>>
 type Status = 'header' | 'body'
+
+type MetaProps = {
+	contentType?: string
+	filename?: string
+	encoding?: string
+	charset?: string
+	disposition?: string
+}
 
 type NodeProps = {
 	[PARENT]?: CompoundNode | null
 	[STATUS]?: Status
 }
 
-type SimpleNode = {
+export type SimpleNode = {
 	kind: 'simple'
 	headers: Headers
-	body: string | null
+	meta: MetaProps
+	body: string
 } & NodeProps
 
-type CompoundNode = {
+export type CompoundNode = {
 	kind: 'compound'
 	headers: Headers
+	meta: MetaProps
 	boundary: string
 	children: Node[]
 } & NodeProps
 
 function convertToCompound(node: Node, boundary: string): void {
-	delete (node as { body?: null }).body
+	delete (node as { body?: string }).body
 
 	const newProps: CompoundNode = {
 		...node,
@@ -52,13 +62,14 @@ function simpleNode(parent: CompoundNode | null): Node {
 	return {
 		kind: 'simple',
 		headers: {},
-		body: null,
+		body: '',
 		[PARENT]: parent,
 		[STATUS]: 'header',
+		meta: {},
 	}
 }
 
-function initialState(): State {
+export function initialState(): State {
 	const buf = ''
 	const root = simpleNode(null)
 
@@ -89,19 +100,14 @@ function splitBy(buf: string, boundary: RegExp): [before: string, boundary: stri
 	return [before, b, after]
 }
 
-function parseHeaders(headers: string) {
-	const n = null as string | null
-
-	const props = {
-		boundary: n,
-		filename: n,
-		encoding: n,
-		contentType: n,
-	}
-
+function parseHeaders(input: string): {
+	headers: Partial<Record<Lowercase<string>, string>>
+	meta: MetaProps
+	boundary?: string
+} {
 	const re = /[\s\S]+?(?:\n(?!\s)|$)/g
 
-	const h = [...headers.matchAll(re)]
+	const h = [...input.matchAll(re)]
 		.map((x) => ({
 			line: x[0],
 			index: x.index,
@@ -110,33 +116,29 @@ function parseHeaders(headers: string) {
 			if (colonIdx === -1) return null
 
 			const key = lowerCase(line.slice(0, colonIdx).trim())
-			const value = decodeQuotedPrintable(line.slice(colonIdx + 1).trim().replaceAll(/[\r\n]/g, ''))
+			const value = line.slice(colonIdx + 1).trim()
 
-			switch (key) {
-				case 'content-type': {
-					// TODO
-					// const [type, subtype] = value.split('/')
-					props.boundary = value.match(/boundary="?([^"]+)"?/i)?.[1] ?? null
-					break
-				}
-				case 'content-disposition': {
-					props.filename = value.match(/filename="?([^"]+)"?/i)?.[1] ?? null
-
-					// const [_, _, filename] = value.match(/filename="?([^"]+)"?/i) ?? []
-					// if (filename) filename = filename.replaceAll(/[\r\n]/g, '')
-					break
-				}
-				default: {
-					break
-				}
-			}
-
-			return { kind: 'header' as const, key, value }
+			return { key, value }
 		}).filter((x) => x != null)
 
+	const headers: Partial<Record<Lowercase<string>, string>> = Object.fromEntries(h.map((x) => [x.key, x.value]))
+
+	const boundary = headers['content-type']?.match(/boundary="?([^";]+)"?/i)?.[1]
+	const meta: MetaProps = {}
+
+	meta.contentType = headers['content-type']?.split(';')[0].toLowerCase()
+	meta.charset = headers['content-type']?.match(/charset="?([^";]+)"?/i)?.[1].toLowerCase()
+
+	meta.disposition = headers['content-disposition']?.split(';')[0].toLowerCase()
+	meta.encoding = headers['content-transfer-encoding']?.trim()
+
+	const filename = getProp(headers['content-disposition'], 'filename') ?? getProp(headers['content-type'], 'name')
+	if (filename) meta.filename = decodeQuotedPrintable(filename)
+
 	return {
-		headers: h,
-		...props,
+		headers,
+		meta,
+		boundary,
 	}
 }
 
@@ -144,22 +146,14 @@ function lowerCase<T extends string>(str: T): Lowercase<T> {
 	return str.toLowerCase() as Lowercase<T>
 }
 
-function serializable(node: Node): Node {
+export function serializable(node: Node): Node {
 	// strip all non-serializable (symbol) properties
 	return JSON.parse(JSON.stringify(node))
 }
 
-export function parse(str: string) {
+export function getNodes(str: string) {
 	const state = initialState()
 	consume(str, state)
-	state.isEof = true
-	consume('', state)
-	return serializable(state.root)
-}
-
-export function parseIncrementally(str: string) {
-	const state = initialState()
-	for (const char of str) consume(char, state)
 	state.isEof = true
 	consume('', state)
 	return serializable(state.root)
@@ -173,7 +167,27 @@ function getBoundaryKind(boundary: string) {
 	return boundary === '' ? 'eof' : 'other'
 }
 
-function consume(chunk: string, state: State) {
+function getProp(header: string | undefined, propKey: string): string | null {
+	if (!header) return null
+	const regex = new RegExp(String.raw`${propKey}(?:\*(?<idx>\d+))?="?(?<content>[^";]+)"?`, 'gi')
+	const matches = [...header.matchAll(regex)]
+
+	if (!matches.length) return null
+
+	let filtered: typeof matches = []
+
+	filtered = matches.filter((x) => !x.groups!.idx)
+
+	if (filtered.length === 1) {
+		return filtered[0].groups!.content
+	}
+
+	filtered = matches.filter((x) => x.groups!.idx)
+
+	return filtered.map((x) => x.groups!.content).join('')
+}
+
+export function consume(chunk: string, state: State) {
 	state.buf += chunk
 
 	while (true) {
@@ -188,17 +202,16 @@ function consume(chunk: string, state: State) {
 				if (headerResult == null) return
 				const [before, _match, after] = headerResult
 
-				const { headers, boundary } = parseHeaders(before)
+				const { headers, meta, boundary } = parseHeaders(before)
 
-				for (const header of headers) {
-					state.currentNode.headers[header.key] = header.value
-				}
+				state.currentNode.headers = headers
 
 				if (boundary != null) {
 					convertToCompound(state.currentNode, boundary)
 				}
 
 				state.currentNode[STATUS] = 'body'
+				state.currentNode.meta = meta
 				state.buf = after
 
 				break
@@ -218,12 +231,11 @@ function consume(chunk: string, state: State) {
 						if (bodyResult == null) return
 						const [before, match, after] = bodyResult
 
-						if (before === '' && state.isEof) {
+						if (before === '') {
 							return
 						}
 
-						state.currentNode.body ??= ''
-						state.currentNode.body += before
+						state.currentNode.body = before
 						state.buf = after
 
 						switch (getBoundaryKind(match)) {
