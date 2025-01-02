@@ -1,6 +1,6 @@
 import { assertEquals, assertInstanceOf } from '@std/assert'
 import { basename } from '@std/path'
-import { Eml as Eml } from './parse.ts'
+import { Eml as Eml } from './eml.ts'
 
 const fixtures = {
 	sample: './src/_fixtures/sample.eml',
