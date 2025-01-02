@@ -1,5 +1,6 @@
 import { assertEquals, assertInstanceOf } from '@std/assert'
 import { basename } from '@std/path'
+import { concat } from '@std/bytes'
 import { Eml as Eml } from './eml.ts'
 
 const fixtures = {
@@ -144,6 +145,13 @@ Deno.test(Eml.name, async (t) => {
 			assertInstanceOf(content, Uint8Array)
 			assertEquals(content.byteLength, expectedByteLength)
 
+			const jpegMagicBytes = concat([
+				new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]),
+				new TextEncoder().encode('JFIF'),
+				new Uint8Array([0x00, 0x01]),
+			])
+
+			assertEquals(content.slice(0, jpegMagicBytes.length), jpegMagicBytes)
 			assertEquals(content, await Deno.readFile('./src/_fixtures/tired_boot.FJ010019.jpeg'))
 		})
 	})
