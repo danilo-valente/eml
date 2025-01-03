@@ -200,6 +200,32 @@ export const fixtures: Fixture[] = [
 					},
 				},
 				{
+					body: 'UTF-8 filename*\n\n',
+					headers: {
+						'content-disposition': "attachment;\n filename*=utf-8''%E6%96%87%E5%AD%97.txt",
+						'content-type': "text/plain;\n name*=utf-8''%E6%96%87%E5%AD%97.txt",
+					},
+					kind: 'simple',
+					meta: {
+						contentType: 'text/plain',
+						disposition: 'attachment',
+						filename: '文字.txt',
+					},
+				},
+				{
+					body: 'ISO-8859-1 filename*\n\n',
+					headers: {
+						'content-disposition': "attachment;\n filename*=iso-8859-1'en'%A3%20rates.txt",
+						'content-type': "text/plain;\n name*=iso-8859-1'en'%A3%20rates.txt",
+					},
+					kind: 'simple',
+					meta: {
+						contentType: 'text/plain',
+						disposition: 'attachment',
+						filename: '£ rates.txt',
+					},
+				},
+				{
 					body: 'long filename in base64-encoded GB2312 charset\n\n',
 					headers: {
 						'content-disposition':
@@ -241,9 +267,9 @@ export const fixtures: Fixture[] = [
 					},
 				},
 				{
-					body: 'prefer `filename` over `filename*0..n`\n\n',
+					body: 'prefer `filename*` over `filename`\n\n',
 					headers: {
-						'content-disposition': 'attachment;\n filename*0="b.t"; filename*1="xt"; filename="c.txt"',
+						'content-disposition': `attachment;\n filename="b.txt"; filename*=utf-8''c.txt`,
 						'content-type': 'text/plain;\n name="a.txt"',
 					},
 					kind: 'simple',
@@ -251,6 +277,33 @@ export const fixtures: Fixture[] = [
 						contentType: 'text/plain',
 						disposition: 'attachment',
 						filename: 'c.txt',
+					},
+				},
+				{
+					body: 'prefer `filename` over `filename*0..n`\n\n',
+					headers: {
+						'content-disposition': 'attachment;\n filename*0="b.t"; filename*1="xt"; filename="d.txt"',
+						'content-type': 'text/plain;\n name="a.txt"',
+					},
+					kind: 'simple',
+					meta: {
+						contentType: 'text/plain',
+						disposition: 'attachment',
+						filename: 'd.txt',
+					},
+				},
+				{
+					body: 'prefer `filename*` over `filename*0..n`\n\n',
+					headers: {
+						'content-disposition':
+							`attachment;\n filename*0="b.t"; filename*1="xt"; filename*=utf-8''e.txt`,
+						'content-type': 'text/plain;\n name="a.txt"',
+					},
+					kind: 'simple',
+					meta: {
+						contentType: 'text/plain',
+						disposition: 'attachment',
+						filename: 'e.txt',
 					},
 				},
 			],

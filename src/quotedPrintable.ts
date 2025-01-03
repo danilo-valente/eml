@@ -4,6 +4,7 @@ type QuotedPrintableProps = {
 	encoding: 'B' | 'Q'
 	charset?: string
 	content: string
+	// leadingWhitespace?: string
 }
 
 export function decodeQuotedPrintableContent({ charset, encoding, content }: QuotedPrintableProps) {
@@ -27,12 +28,17 @@ export function decodeQuotedPrintableContent({ charset, encoding, content }: Quo
 	}
 }
 
-export function decodeQuotedPrintable(str: string) {
-	return str.replaceAll(
-		/=\?(?<charset>[a-z0-9\-]+)\?(?<encoding>[bq]+)\?(?<content>.+)\?=(?:\r?\n\s*)?/gi,
-		(...args) => {
-			const groups = args[args.findIndex((x) => typeof x === 'number') + 2]
-			return decodeQuotedPrintableContent(groups)
-		},
-	)
+export function decodeQuotedPrintable<T extends string | null | undefined>(input: T): T {
+	if (input == null) return input
+
+	return input
+		.replaceAll(/\r?\n/g, '')
+		.replaceAll(/\?=\s+=\?/g, '?==?')
+		.replaceAll(
+			/=\?(?<charset>[a-z0-9\-]+)\?(?<encoding>[bq]+)\?(?<content>.+?)\?=/gi,
+			(...args) => {
+				const groups = args[args.findIndex((x) => typeof x === 'number') + 2]
+				return decodeQuotedPrintableContent(groups)
+			},
+		) as T
 }

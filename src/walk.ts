@@ -14,6 +14,7 @@ type MetaProps = {
 	encoding?: string
 	charset?: string
 	disposition?: string
+	fileNameIsRfc5987?: boolean
 }
 
 type NodeProps = {
@@ -126,14 +127,14 @@ function parseHeaders(input: string): {
 	const boundary = headers['content-type']?.match(/boundary="?([^";]+)"?/i)?.[1]
 	const meta: MetaProps = {}
 
-	meta.contentType = headers['content-type']?.split(';')[0].toLowerCase()
-	meta.charset = headers['content-type']?.match(/charset="?([^";]+)"?/i)?.[1].toLowerCase()
+	meta.contentType = decodeQuotedPrintable(headers['content-type']?.split(';')[0])?.toLowerCase()
+	meta.charset = decodeQuotedPrintable(headers['content-type']?.match(/charset="?([^";]+)"?/i)?.[1])?.toLowerCase()
+	if (meta.charset === 'utf8') meta.charset = 'utf-8'
 
-	meta.disposition = headers['content-disposition']?.split(';')[0].toLowerCase()
-	meta.encoding = headers['content-transfer-encoding']?.trim()
+	meta.disposition = decodeQuotedPrintable(headers['content-disposition']?.split(';')[0])?.toLowerCase()
+	meta.encoding = decodeQuotedPrintable(headers['content-transfer-encoding']?.split(';')[0])?.trim()
 
-	const filename = getProp(headers['content-disposition'], 'filename') ?? getProp(headers['content-type'], 'name')
-	if (filename) meta.filename = decodeQuotedPrintable(filename)
+	meta.filename = getProp(headers['content-disposition'], 'filename') ?? getProp(headers['content-type'], 'name')
 
 	return {
 		headers,
@@ -167,24 +168,77 @@ function getBoundaryKind(boundary: string) {
 	return boundary === '' ? 'eof' : 'other'
 }
 
-function getProp(header: string | undefined, propKey: string): string | null {
-	if (!header) return null
-	const regex = new RegExp(String.raw`${propKey}(?:\*(?<idx>\d+))?="?(?<content>[^";]+)"?`, 'gi')
+type PropGroups = {
+	idx?: string
+	star: string
+	content: string
+}
+
+function decodeRfc5987(str: string) {
+	const [encoding, content] = str.split(/'[a-z\-]*'/i)
+
+	if (!content) return str
+
+	const bytes = Uint8Array.from(
+		content.match(/%\p{AHex}{2}|./gsu) ?? [],
+		(x) => x.startsWith('%') ? parseInt(x.slice(1), 16) : x.codePointAt(0)!,
+	)
+
+	return new TextDecoder(encoding).decode(bytes)
+}
+
+function getPropPart({ groups }: { groups: PropGroups }, i: number) {
+	if (groups.idx != null && Number(groups.idx) !== i) throw new RangeError('Wrong index')
+
+	return groups.content
+}
+
+function getProp(header: string | undefined, propKey: string): string | undefined {
+	if (!header) return
+
+	const regex = new RegExp(String.raw`${propKey}(?:\*(?<idx>\d+))?(?<star>\*)?="?(?<content>[^";]+)"?`, 'gi')
 	const matches = [...header.matchAll(regex)]
 
-	if (!matches.length) return null
+	if (!matches.length) return
 
-	let filtered: typeof matches = []
+	let useRfc5987 = true
 
-	filtered = matches.filter((x) => !x.groups!.idx)
+	let prev = matches
+	let current = matches
 
-	if (filtered.length === 1) {
-		return filtered[0].groups!.content
+	function filter(predicate: Parameters<typeof matches['filter']>[0]) {
+		prev = current
+		current = current.filter(predicate)
 	}
 
-	filtered = matches.filter((x) => x.groups!.idx)
+	function revert() {
+		current = prev
+	}
 
-	return filtered.map((x) => x.groups!.content).join('')
+	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition#as_a_response_header_for_the_main_body
+	// > When both filename and filename* are present in a single header field value, filename* is preferred over filename when both are understood
+	filter((x) => x.groups!.star)
+	if (!current.length) {
+		revert()
+		useRfc5987 = false
+	}
+
+	if (current.length !== 1) {
+		filter((x) => !x.groups!.idx)
+		if (current.length !== 1) {
+			revert()
+			filter((x) => x.groups!.idx)
+			if (!current.length) return
+		}
+	}
+
+	const filenameParts = current.map((x, i) => getPropPart({ groups: x.groups as PropGroups }, i))
+
+	if (useRfc5987) {
+		return filenameParts.map(decodeRfc5987).join('')
+	}
+
+	return decodeQuotedPrintable(filenameParts.join(''))
 }
 
 export function consume(chunk: string, state: State) {
@@ -241,7 +295,8 @@ export function consume(chunk: string, state: State) {
 						switch (getBoundaryKind(match)) {
 							case 'final': {
 								// go up one level (if parent is root) or two levels otherwise
-								state.currentNode = parent![PARENT]! ?? parent!
+								if (parent![PARENT] != null) state.currentNode = parent![PARENT]
+								else state.currentNode = parent!
 
 								break
 							}
@@ -273,7 +328,9 @@ export function consume(chunk: string, state: State) {
 
 						switch (getBoundaryKind(match)) {
 							case 'final': {
-								// do nothing
+								// go up one level
+								if (parent != null) state.currentNode = parent
+
 								break
 							}
 							case 'medial': {

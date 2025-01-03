@@ -26,6 +26,22 @@ Content-Disposition: attachment;
 long filename split into parts
 
 --------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain;
+ name*=utf-8''%E6%96%87%E5%AD%97.txt
+Content-Disposition: attachment;
+ filename*=utf-8''%E6%96%87%E5%AD%97.txt
+
+UTF-8 filename*
+
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain;
+ name*=iso-8859-1'en'%A3%20rates.txt
+Content-Disposition: attachment;
+ filename*=iso-8859-1'en'%A3%20rates.txt
+
+ISO-8859-1 filename*
+
+--------------194F0B6C07FF2414138ED9B2
 Content-Type: text/plain
 Content-Disposition: attachment;
 	filename="=?gb2312?B?zsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19bOxNfWzsTX1s7E19Y=?=
@@ -62,8 +78,24 @@ prefer `filename` over `name`
 Content-Type: text/plain;
  name="a.txt"
 Content-Disposition: attachment;
- filename*0="b.t"; filename*1="xt"; filename="c.txt"
+ filename="b.txt"; filename*=utf-8''c.txt
+
+prefer `filename*` over `filename`
+
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain;
+ name="a.txt"
+Content-Disposition: attachment;
+ filename*0="b.t"; filename*1="xt"; filename="d.txt"
 
 prefer `filename` over `filename*0..n`
+
+--------------194F0B6C07FF2414138ED9B2
+Content-Type: text/plain;
+ name="a.txt"
+Content-Disposition: attachment;
+ filename*0="b.t"; filename*1="xt"; filename*=utf-8''e.txt
+
+prefer `filename*` over `filename*0..n`
 
 --------------194F0B6C07FF2414138ED9B2--

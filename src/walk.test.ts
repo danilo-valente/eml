@@ -1,7 +1,8 @@
 import { assertEquals } from '@std/assert'
 import { join } from '@std/path'
-import { consume, getNodes, initialState, serializable } from './walk.ts'
+import { getNodes } from './walk.ts'
 import { fixtures, FIXTURES_DIR } from './_fixtures.ts'
+import { getNodesIncrementally } from './_testUtils.ts'
 
 Deno.test(getNodes.name, async (t) => {
 	for (const fixture of fixtures) {
@@ -11,14 +12,6 @@ Deno.test(getNodes.name, async (t) => {
 		})
 	}
 })
-
-function getNodesIncrementally(str: string) {
-	const state = initialState()
-	for (const char of str) consume(char, state)
-	state.isEof = true
-	consume('', state)
-	return serializable(state.root)
-}
 
 Deno.test(getNodesIncrementally.name, async (t) => {
 	for (const fixture of fixtures) {

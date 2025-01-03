@@ -1,7 +1,8 @@
 import { assertEquals, assertInstanceOf } from '@std/assert'
 import { basename } from '@std/path'
 import { concat } from '@std/bytes'
-import { Eml as Eml } from './eml.ts'
+import { Eml } from './eml.ts'
+import { hash, stubByEnvVar } from './_testUtils.ts'
 
 const fixtures = {
 	sample: './src/_fixtures/sample.eml',
@@ -13,6 +14,8 @@ const fixtures = {
 }
 
 Deno.test(Eml.name, async (t) => {
+	using _ = stubByEnvVar()
+
 	await t.step(basename(fixtures.sample), async (t) => {
 		const eml = new Eml(await Deno.readFile('./src/_fixtures/sample.eml'))
 
@@ -152,7 +155,7 @@ Deno.test(Eml.name, async (t) => {
 			])
 
 			assertEquals(content.slice(0, jpegMagicBytes.length), jpegMagicBytes)
-			assertEquals(content, await Deno.readFile('./src/_fixtures/tired_boot.FJ010019.jpeg'))
+			assertEquals(await hash(content), 'f561388f7446cedd5b8b480311744b3c')
 		})
 	})
 
@@ -164,10 +167,14 @@ Deno.test(Eml.name, async (t) => {
 
 			const expectedFilenames = [
 				'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345.txt',
-				'文字'.repeat(100) + '.txt',
+				'文字.txt',
+				'£ rates.txt',
+				`${'文字'.repeat(100)}.txt`,
 				'a.txt',
 				'b.txt',
 				'c.txt',
+				'd.txt',
+				'e.txt',
 			]
 
 			assertEquals(attachments.length, expectedFilenames.length)
