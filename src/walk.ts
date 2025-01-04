@@ -2,7 +2,7 @@ import { escape as regexpEscape } from '@std/regexp'
 import { unreachable } from '@std/assert/unreachable'
 import { decodeQuotedPrintable } from './quotedPrintable.ts'
 import { assert } from '@std/assert/assert'
-import { IS_NODE, PARENT, STATUS } from './_symbols.ts'
+import { PARENT, STATUS } from './_symbols.ts'
 
 export type Status = 'header' | 'body'
 
@@ -17,65 +17,84 @@ type MetaProps = {
 	fileNameIsRfc5987?: boolean
 }
 
-type NodeProps = {
-	[PARENT]?: CompoundNode | null
-	[STATUS]?: Status
-	[IS_NODE]?: true
+type NodeCtorParams = {
+	headers?: Headers
+	meta?: MetaProps
+	parent: CompoundNode | null
 }
 
-export type SimpleNode = {
-	kind: 'simple'
+type SimpleNodeCtorParams = NodeCtorParams & {
+	body?: string
+}
+
+export abstract class Node {
+	[PARENT]?: CompoundNode | null;
+	[STATUS]?: Status
+
 	headers: Headers
 	meta: MetaProps
+
+	constructor({ headers, meta, parent }: NodeCtorParams) {
+		this.headers = headers ?? {}
+		this.meta = meta ?? {}
+
+		this[PARENT] = parent
+		this[STATUS] = 'header'
+	}
+}
+
+export type AnyNode = SimpleNode | CompoundNode
+
+export class SimpleNode extends Node {
+	readonly kind = 'simple'
 	body: string
-} & NodeProps
 
-export type CompoundNode = {
-	kind: 'compound'
-	headers: Headers
-	meta: MetaProps
-	boundary: string
-	children: Node[]
-} & NodeProps
+	constructor({ headers, meta, body, parent }: SimpleNodeCtorParams) {
+		super({ headers, meta, parent })
+		this.body = body ?? ''
+	}
+}
 
-function convertToCompound(node: Node, boundary: string): void {
-	delete (node as { body?: string }).body
+export abstract class CompoundNode extends Node {
+	readonly kind = 'compound'
 
-	const newProps: CompoundNode = {
-		...node,
-		kind: 'compound',
-		boundary,
-		children: [],
+	boundary!: string
+	children!: AnyNode[]
+}
+
+/** Convert in-place to ensure all references are updated while still passing `instanceof` checks */
+function convertToCompoundNode(node: AnyNode, boundary: string): asserts node is CompoundNode {
+	const k: Record<Exclude<keyof SimpleNodeCtorParams, keyof NodeCtorParams>, null> = { body: null }
+
+	for (const _key of Object.keys(k)) {
+		const key = _key as keyof typeof k
+		delete (node as Partial<SimpleNode>)[key]
 	}
 
-	Object.assign(node, newProps)
+	const n = node as CompoundNode
+	Object.setPrototypeOf(n, CompoundNode.prototype)
+	assert(n instanceof CompoundNode)
+
+	const params: Omit<CompoundNode, keyof Node> = { boundary, children: [], kind: 'compound' }
+
+	for (const _key in params) {
+		const key = _key as keyof typeof params
+		// @ts-expect-error - TS is bad actually
+		n[key] = params[key] as CompoundNode[typeof key]
+	}
 }
 
-export type Node = SimpleNode | CompoundNode
-
 export type State = {
-	root: Node
-	currentNode: Node
+	root: AnyNode
+	currentNode: AnyNode
 	buf: string
 	decoder: TextDecoder
 	queuedChunks: Uint8Array[]
 }
 
-function createSimpleNode(parent: CompoundNode | null): Node {
-	return {
-		[IS_NODE]: true,
-		kind: 'simple',
-		headers: {},
-		body: '',
-		[PARENT]: parent,
-		[STATUS]: 'header',
-		meta: {},
-	}
-}
-
 export function initialState(): State {
 	const buf = ''
-	const root = createSimpleNode(null)
+	const root = new SimpleNode({ parent: null })
 
 	return { buf, root, currentNode: root, decoder: new TextDecoder(), queuedChunks: [] }
 }
@@ -290,7 +309,7 @@ export function consume(chunk: string, state: State, options: Options = {}) {
 
 		switch (status) {
 			case 'header': {
-				let source = /(?<=\S\s*)(\r?\n){2}/.source
+				let { source } = /(?<=\S\s*)(\r?\n){2}/
 				if (options.stopAfterHeader || options.isEof) source = String.raw`(?:${source})|$`
 
 				const headerResult = splitBy(state.buf, new RegExp(source, ''))
@@ -299,12 +318,11 @@ export function consume(chunk: string, state: State, options: Options = {}) {
 
 				const { headers, meta, boundary } = parseHeaders(before)
 
-				state.currentNode.headers = headers
-
 				if (boundary != null) {
-					convertToCompound(state.currentNode, boundary)
+					convertToCompoundNode(state.currentNode, boundary)
 				}
 
+				state.currentNode.headers = headers
 				state.currentNode[STATUS] = 'body'
 				state.currentNode.meta = meta
 				state.buf = after
@@ -316,82 +334,78 @@ export function consume(chunk: string, state: State, options: Options = {}) {
 			case 'body': {
 				const parent = state.currentNode[PARENT] ?? null
 
-				switch (state.currentNode.kind) {
-					case 'simple': {
-						let source = parent == null
-							? String.raw`^\b$`
-							// negative lookahead to `$` or `-$` to ensure partial final not misinterpreted as medial
-							: `--${regexpEscape(parent.boundary)}(?!-?$)(?:--)?`
-						if (options.isEof) source = String.raw`(?:${source})|$`
-
-						const bodyResult = splitBy(state.buf, new RegExp(source, ''))
-						if (bodyResult == null) return
-						const [before, match, after] = bodyResult
-
-						if (before === '') {
-							return
-						}
-
-						state.currentNode.body = before
-						state.buf = after
-
-						switch (getBoundaryKind(match)) {
-							case 'final': {
-								// go up one level (if parent is root) or two levels otherwise
-								if (parent![PARENT] != null) state.currentNode = parent![PARENT]
-								else state.currentNode = parent!
-
-								break
-							}
-							case 'medial': {
-								// add sibling node after
-								const node = createSimpleNode(parent!)
-								parent!.children.push(node)
-								state.currentNode = node
-
-								break
-							}
-							case 'eof':
-								return
-							default:
-								unreachable()
-						}
-
-						break
-					}
-					case 'compound': {
+				if (state.currentNode instanceof SimpleNode) {
+					let source = parent == null
+						// never match
+						? String.raw`^\b$`
 						// negative lookahead to `$` or `-$` to ensure partial final not misinterpreted as medial
-						let source = `--${regexpEscape(state.currentNode.boundary)}(?!-?$)(?:--)?`
-						if (options.isEof) source = String.raw`(?:${source})|$`
+						: `--${regexpEscape(parent.boundary)}(?!-?$)(?:--)?`
+					if (options.isEof) source = String.raw`(?:${source})|$`
 
-						const partResult = splitBy(state.buf, new RegExp(source, ''))
-						if (partResult == null) return
-						const [_before, match, after] = partResult
+					const bodyResult = splitBy(state.buf, new RegExp(source, ''))
+					if (bodyResult == null) return
+					const [before, match, after] = bodyResult
 
-						switch (getBoundaryKind(match)) {
-							case 'final': {
-								// go up one level
-								if (parent != null) state.currentNode = parent
-
-								break
-							}
-							case 'medial': {
-								// add child node
-								const node = createSimpleNode(state.currentNode)
-								state.currentNode.children.push(node)
-								state.currentNode = node
-								break
-							}
-							case 'eof':
-								return
-							default:
-								unreachable()
-						}
-
-						state.buf = after
-
-						break
+					if (before === '') {
+						return
 					}
+
+					state.currentNode.body = before
+					state.buf = after
+
+					switch (getBoundaryKind(match)) {
+						case 'final': {
+							// go up one level (if parent is root) or two levels otherwise
+							if (parent![PARENT] != null) state.currentNode = parent![PARENT]
+							else state.currentNode = parent!
+
+							break
+						}
+						case 'medial': {
+							// add sibling node after
+							const node = new SimpleNode({ parent })
+							parent!.children.push(node)
+							state.currentNode = node
+
+							break
+						}
+						case 'eof':
+							return
+						default:
+							unreachable()
+					}
+				} else {
+					assert(state.currentNode instanceof CompoundNode)
+
+					// negative lookahead to `$` or `-$` to ensure partial final not misinterpreted as medial
+					let source = `--${regexpEscape(state.currentNode.boundary)}(?!-?$)(?:--)?`
+					if (options.isEof) source = String.raw`(?:${source})|$`
+
+					const partResult = splitBy(state.buf, new RegExp(source, ''))
+					if (partResult == null) return
+					const [_before, match, after] = partResult
+
+					switch (getBoundaryKind(match)) {
+						case 'final': {
+							// go up one level
+							if (parent != null) state.currentNode = parent
+
+							break
+						}
+						case 'medial': {
+							// add child node
+							const node = new SimpleNode({ parent: state.currentNode })
+							state.currentNode.children.push(node)
+							state.currentNode = node
+							break
+						}
+						case 'eof':
+							return
+						default:
+							unreachable()
+					}
+
+					state.buf = after
 				}
 
 				break
@@ -405,17 +419,17 @@ export function getBodyNodes(root: CompoundNode): {
 	plain: SimpleNode | null
 } {
 	const alternativeNode = root.children.find((x) =>
-		x.kind === 'compound' && x.meta.contentType === 'multipart/alternative'
+		x instanceof CompoundNode && x.meta.contentType === 'multipart/alternative'
 	)
 
 	if (alternativeNode != null) {
-		assert(alternativeNode.kind === 'compound')
+		assert(alternativeNode instanceof CompoundNode)
 	}
 
-	const simpleNodes = (alternativeNode ?? root).children.filter((x) => x.kind === 'simple')
+	const simpleNodes = (alternativeNode ?? root).children.filter((x) => x instanceof SimpleNode)
 
-	const html = simpleNodes.find((x) => x.kind === 'simple' && x.meta.contentType === 'text/html') ?? null
-	const plain = simpleNodes.find((x) => x.kind === 'simple' && x.meta.contentType === 'text/plain') ?? null
+	const html = simpleNodes.find((x) => x instanceof SimpleNode && x.meta.contentType === 'text/html') ?? null
+	const plain = simpleNodes.find((x) => x instanceof SimpleNode && x.meta.contentType === 'text/plain') ?? null
 
 	return { html, plain }
 }
@@ -425,17 +439,13 @@ export function walkAndFindMatchingNodes<T extends Node>(
 	predicate: (node: Node) => node is T,
 	acc: Node[] = [],
 ): T[] {
-	switch (node.kind) {
-		case 'simple': {
-			if (predicate(node)) acc.push(node)
-			break
-		}
-		case 'compound': {
-			if (predicate(node)) acc.push(node)
-			for (const child of node.children) {
-				walkAndFindMatchingNodes(child, predicate, acc)
-			}
-			break
+	if (node instanceof SimpleNode) {
+		if (predicate(node)) acc.push(node)
+	} else {
+		assert(node instanceof CompoundNode)
+		if (predicate(node)) acc.push(node)
+		for (const child of node.children) {
+			walkAndFindMatchingNodes(child, predicate, acc)
 		}
 	}
 

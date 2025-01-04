@@ -1,10 +1,10 @@
-import type { Node } from './walk.ts'
+import type { AnyNode } from './walk.ts'
 
 export const FIXTURES_DIR = './src/_fixtures'
 
 type Fixture = {
 	fileName: string
-	expected: Node
+	expected: AnyNode
 }
 
 export const fixtures: Fixture[] = [

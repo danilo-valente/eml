@@ -1,14 +1,13 @@
 import { assert } from '@std/assert/assert'
 import { getBodyNodes, getNodes, walkAndFindMatchingNodes } from './walk.ts'
-import type { CompoundNode, Node, SimpleNode } from './walk.ts'
+import { CompoundNode, Node, SimpleNode } from './walk.ts'
 import { decodeQuotedPrintable, decodeQuotedPrintableContent } from './quotedPrintable.ts'
-import { unreachable } from '@std/assert/unreachable'
 import { htmlToPlainText, plainTextToHtml } from './html.ts'
 import { decodeBase64 } from '@std/encoding/base64'
 import { parseDateHeader, type ZonedDateTime } from './date.ts'
 import { type Mailbox, parseMailboxList } from './mailbox.ts'
 import { getNodesFromReadable } from './stream.ts'
-import { IS_NODE, PARSE_TO_NODES } from './_symbols.ts'
+import { PARSE_TO_NODES } from './_symbols.ts'
 
 type Attachment = {
 	filename: string
@@ -55,9 +54,9 @@ export class Eml {
 
 	attachments: Attachment[]
 
-	constructor(source: Uint8Array) {
-		// @ts-expect-error - passing Node to ctor is only supported internally
-		const root: Node = source[IS_NODE] ? source : Eml[PARSE_TO_NODES](source)
+	constructor(bytes: Uint8Array) {
+		const input = bytes as Uint8Array | Node
+		const root: Node = input instanceof Node ? input : Eml[PARSE_TO_NODES](input)
 
 		this.from = nonEmptyWithAssertion(parseMailboxList(root.headers.from))
 		this.replyTo = parseMailboxList(root.headers['reply-to'])
@@ -72,39 +71,33 @@ export class Eml {
 		let plain: string | undefined
 		let html: string | undefined
 
-		switch (root.kind) {
-			case 'simple': {
-				switch (root.meta.contentType) {
-					case 'text/html': {
-						html = root.body
-						break
-					}
-					default: {
-						// assume text/plain
-						plain = root.body
-						break
-					}
+		if (root instanceof SimpleNode) {
+			switch (root.meta.contentType) {
+				case 'text/html': {
+					html = root.body
+					break
 				}
-
-				this.attachments = []
-				break
+				default: {
+					// assume text/plain
+					plain = root.body
+					break
+				}
 			}
-			case 'compound': {
-				const nodes = getBodyNodes(root)
 
-				if (nodes.html) {
-					html = getNodeBodyText(nodes.html)
-				}
-				if (nodes.plain) {
-					plain = getNodeBodyText(nodes.plain)
-				}
+			this.attachments = []
+		} else {
+			assert(root instanceof CompoundNode)
 
-				this.attachments = getAttachments(root)
+			const nodes = getBodyNodes(root)
 
-				break
+			if (nodes.html) {
+				html = getNodeBodyText(nodes.html)
 			}
-			default:
-				unreachable()
+			if (nodes.plain) {
+				plain = getNodeBodyText(nodes.plain)
+			}
+
+			this.attachments = getAttachments(root)
 		}
 
 		this.body = new Body({ plain, html })
@@ -114,7 +107,7 @@ export class Eml {
 		return getNodes(bytes)
 	}
 
-	static async fromReadable(readable: ReadableStream<Uint8Array>) {
+	static async read(readable: ReadableStream<Uint8Array>) {
 		// @ts-expect-error - passing Node to ctor is only supported internally
 		return new Eml(await getNodesFromReadable(readable))
 	}
@@ -146,7 +139,7 @@ function getNodeBodyText(node: SimpleNode): string {
 function getAttachments(root: CompoundNode): Attachment[] {
 	return walkAndFindMatchingNodes(
 		root,
-		(x): x is SimpleNode => x.kind === 'simple' && x.meta.disposition === 'attachment',
+		(x): x is SimpleNode => x instanceof SimpleNode && x.meta.disposition === 'attachment',
 	)
 		.map((x) => {
 			const { meta: { contentType, filename, encoding, charset }, body } = x

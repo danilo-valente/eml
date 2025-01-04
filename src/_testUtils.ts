@@ -34,7 +34,7 @@ export async function emlFromFilePath(path: string): Promise<Eml> {
 		return new Eml(await Deno.readFile(path))
 	} else if (streamChunkSize > 0) {
 		const { readable } = await Deno.open(path)
-		return await Eml.fromReadable(readable.pipeThrough(new FixedChunkStream(streamChunkSize)))
+		return await Eml.read(readable.pipeThrough(new FixedChunkStream(streamChunkSize)))
 	} else {
 		return new Eml(await Deno.readFile(path))
 	}
