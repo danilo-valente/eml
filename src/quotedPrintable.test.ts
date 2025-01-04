@@ -12,8 +12,8 @@ Deno.test(decodeQuotedPrintable.name, async (t) => {
 	})
 
 	await t.step('base64', () => {
-		// assertEquals(decodeQuotedPrintable('=?gb2312?B?zsTX1s7E19Y=?='), '文字文字')
-		// assertEquals(decodeQuotedPrintable('=?gb2312?B?zsTX1s7E19Y=?=\n =?gb2312?B?zsTX1s7E19Y=?='), '文字文字文字文字')
+		assertEquals(decodeQuotedPrintable('=?gb2312?B?zsTX1s7E19Y=?='), '文字文字')
+		assertEquals(decodeQuotedPrintable('=?gb2312?B?zsTX1s7E19Y=?=\n =?gb2312?B?zsTX1s7E19Y=?='), '文字文字文字文字')
 	})
 
 	await t.step('mixed', () => {

@@ -3,7 +3,7 @@
 	"tasks": {
 		"dev": "deno run --watch main.ts",
 		"test": "deno test -A",
-		"test-stub": "USE_INCREMENTAL_STUB=1 deno test -A"
+		"test-stub": "STREAM_CHUNK_SIZE=1 deno test -A"
 	},
 	"imports": {
 		"@std/assert": "jsr:@std/assert@1",

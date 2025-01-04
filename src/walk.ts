@@ -1,12 +1,12 @@
 import { escape as regexpEscape } from '@std/regexp'
 import { unreachable } from '@std/assert/unreachable'
 import { decodeQuotedPrintable } from './quotedPrintable.ts'
+import { assert } from '@std/assert/assert'
+import { IS_NODE, PARENT, STATUS } from './_symbols.ts'
 
-const STATUS = Symbol('status')
-const PARENT = Symbol('parent')
+export type Status = 'header' | 'body'
 
 type Headers = Partial<Record<Lowercase<string>, string>>
-type Status = 'header' | 'body'
 
 type MetaProps = {
 	contentType?: string
@@ -20,6 +20,7 @@ type MetaProps = {
 type NodeProps = {
 	[PARENT]?: CompoundNode | null
 	[STATUS]?: Status
+	[IS_NODE]?: true
 }
 
 export type SimpleNode = {
@@ -52,15 +53,17 @@ function convertToCompound(node: Node, boundary: string): void {
 
 export type Node = SimpleNode | CompoundNode
 
-type State = {
+export type State = {
 	root: Node
 	currentNode: Node
 	buf: string
-	isEof: boolean
+	decoder: TextDecoder
+	queuedChunks: Uint8Array[]
 }
 
-function simpleNode(parent: CompoundNode | null): Node {
+function createSimpleNode(parent: CompoundNode | null): Node {
 	return {
+		[IS_NODE]: true,
 		kind: 'simple',
 		headers: {},
 		body: '',
@@ -72,9 +75,9 @@ function simpleNode(parent: CompoundNode | null): Node {
 
 export function initialState(): State {
 	const buf = ''
-	const root = simpleNode(null)
+	const root = createSimpleNode(null)
 
-	return { buf, root, currentNode: root, isEof: false }
+	return { buf, root, currentNode: root, decoder: new TextDecoder(), queuedChunks: [] }
 }
 
 function splitBy(buf: string, boundary: RegExp): [before: string, boundary: string, after: string] | null {
@@ -147,17 +150,50 @@ function lowerCase<T extends string>(str: T): Lowercase<T> {
 	return str.toLowerCase() as Lowercase<T>
 }
 
-export function serializable(node: Node): Node {
-	// strip all non-serializable (symbol) properties
-	return JSON.parse(JSON.stringify(node))
+export function endOfDoubleNewLineIndex(bytes: Uint8Array): number {
+	const CR = 0x0D
+	const LF = 0x0A
+
+	let isCrlf = false
+	let count = 0
+
+	for (let i = 0; i < bytes.length; ++i) {
+		const byte = bytes[i]!
+		if (byte === LF) ++count
+		else if (byte === CR) isCrlf = true
+		else count = 0
+
+		if (count === 2) {
+			const idx = i + (isCrlf ? 2 : 1)
+			if (idx <= bytes.length) return idx
+		}
+	}
+
+	return -1
 }
 
-export function getNodes(str: string) {
+export function getNodes(source: Uint8Array) {
 	const state = initialState()
-	consume(str, state)
-	state.isEof = true
-	consume('', state)
-	return serializable(state.root)
+
+	const headerEndIdx = endOfDoubleNewLineIndex(source)
+
+	if (headerEndIdx === -1) {
+		// only header, no body
+		consume(state.decoder.decode(source), state, { isEof: true })
+		return state.root
+	}
+
+	const headerStr = state.decoder.decode(source.subarray(0, headerEndIdx))
+
+	consume(headerStr, state, { stopAfterHeader: true })
+
+	state.decoder = new TextDecoder(state.root.meta.charset)
+
+	const bodyStr = state.decoder.decode(source.subarray(headerEndIdx))
+
+	consume(bodyStr, state)
+	consume('', state, { isEof: true })
+	return state.root
 }
 
 function getBoundaryKind(boundary: string) {
@@ -241,7 +277,12 @@ function getProp(header: string | undefined, propKey: string): string | undefine
 	return decodeQuotedPrintable(filenameParts.join(''))
 }
 
-export function consume(chunk: string, state: State) {
+type Options = {
+	isEof?: boolean
+	stopAfterHeader?: boolean
+}
+
+export function consume(chunk: string, state: State, options: Options = {}) {
 	state.buf += chunk
 
 	while (true) {
@@ -250,7 +291,7 @@ export function consume(chunk: string, state: State) {
 		switch (status) {
 			case 'header': {
 				let source = /(?<=\S\s*)(\r?\n){2}/.source
-				if (state.isEof) source = String.raw`(?:${source})|$`
+				if (options.stopAfterHeader || options.isEof) source = String.raw`(?:${source})|$`
 
 				const headerResult = splitBy(state.buf, new RegExp(source, ''))
 				if (headerResult == null) return
@@ -268,6 +309,8 @@ export function consume(chunk: string, state: State) {
 				state.currentNode.meta = meta
 				state.buf = after
 
+				if (options.stopAfterHeader) return
+
 				break
 			}
 			case 'body': {
@@ -279,7 +322,7 @@ export function consume(chunk: string, state: State) {
 							? String.raw`^\b$`
 							// negative lookahead to `$` or `-$` to ensure partial final not misinterpreted as medial
 							: `--${regexpEscape(parent.boundary)}(?!-?$)(?:--)?`
-						if (state.isEof) source = String.raw`(?:${source})|$`
+						if (options.isEof) source = String.raw`(?:${source})|$`
 
 						const bodyResult = splitBy(state.buf, new RegExp(source, ''))
 						if (bodyResult == null) return
@@ -302,7 +345,7 @@ export function consume(chunk: string, state: State) {
 							}
 							case 'medial': {
 								// add sibling node after
-								const node = simpleNode(parent!)
+								const node = createSimpleNode(parent!)
 								parent!.children.push(node)
 								state.currentNode = node
 
@@ -319,8 +362,7 @@ export function consume(chunk: string, state: State) {
 					case 'compound': {
 						// negative lookahead to `$` or `-$` to ensure partial final not misinterpreted as medial
 						let source = `--${regexpEscape(state.currentNode.boundary)}(?!-?$)(?:--)?`
-						if (state.isEof) source = String.raw`(?:${source})|$`
-						else source += '(?!$)'
+						if (options.isEof) source = String.raw`(?:${source})|$`
 
 						const partResult = splitBy(state.buf, new RegExp(source, ''))
 						if (partResult == null) return
@@ -335,7 +377,7 @@ export function consume(chunk: string, state: State) {
 							}
 							case 'medial': {
 								// add child node
-								const node = simpleNode(state.currentNode)
+								const node = createSimpleNode(state.currentNode)
 								state.currentNode.children.push(node)
 								state.currentNode = node
 								break
@@ -356,4 +398,46 @@ export function consume(chunk: string, state: State) {
 			}
 		}
 	}
+}
+
+export function getBodyNodes(root: CompoundNode): {
+	html: SimpleNode | null
+	plain: SimpleNode | null
+} {
+	const alternativeNode = root.children.find((x) =>
+		x.kind === 'compound' && x.meta.contentType === 'multipart/alternative'
+	)
+
+	if (alternativeNode != null) {
+		assert(alternativeNode.kind === 'compound')
+	}
+
+	const simpleNodes = (alternativeNode ?? root).children.filter((x) => x.kind === 'simple')
+
+	const html = simpleNodes.find((x) => x.kind === 'simple' && x.meta.contentType === 'text/html') ?? null
+	const plain = simpleNodes.find((x) => x.kind === 'simple' && x.meta.contentType === 'text/plain') ?? null
+
+	return { html, plain }
+}
+
+export function walkAndFindMatchingNodes<T extends Node>(
+	node: Node,
+	predicate: (node: Node) => node is T,
+	acc: Node[] = [],
+): T[] {
+	switch (node.kind) {
+		case 'simple': {
+			if (predicate(node)) acc.push(node)
+			break
+		}
+		case 'compound': {
+			if (predicate(node)) acc.push(node)
+			for (const child of node.children) {
+				walkAndFindMatchingNodes(child, predicate, acc)
+			}
+			break
+		}
+	}
+
+	return acc as T[]
 }

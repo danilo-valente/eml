@@ -1,29 +1,45 @@
 import { encodeHex } from '@std/encoding/hex'
 import { crypto } from '@std/crypto'
-import { consume, initialState, serializable } from './walk.ts'
 import { Eml } from './eml.ts'
-import { stub } from '@std/testing/mock'
+import { FixedChunkStream } from '@std/streams/unstable-fixed-chunk-stream'
+import { PARSE_TO_NODES } from './_symbols.ts'
 
 export async function hash(bytes: Uint8Array) {
 	return encodeHex(await crypto.subtle.digest('MD5', bytes))
 }
 
-export function stubByEnvVar() {
-	const condition = Boolean(Deno.env.get('USE_INCREMENTAL_STUB'))
+export async function emlFromFilePath(path: string): Promise<Eml> {
+	const streamChunkSize = Number(Deno.env.get('STREAM_CHUNK_SIZE')) | 0
 
-	if (!condition) return
+	if (streamChunkSize < 0) {
+		const chunkSize = Math.abs(streamChunkSize)
 
-	return stub(
-		Eml,
-		'parseToNodes',
-		(source) => getNodesIncrementally(typeof source === 'string' ? source : new TextDecoder().decode(source)),
-	)
+		const { initialState, consume } = await import('./walk.ts')
+		const { stub } = await import('@std/testing/mock')
+
+		using _ = stub(Eml, PARSE_TO_NODES, function getNodesIncrementallyPerChar(bytes) {
+			const state = initialState()
+
+			const str = new TextDecoder().decode(bytes)
+			const matcher = new RegExp(String.raw`.{${chunkSize}}|.+`, 'gsu')
+
+			for (const chunk of str.match(matcher) ?? []) {
+				consume(chunk, state)
+			}
+
+			consume('', state, { isEof: true })
+			return serializable(state.root)
+		})
+
+		return new Eml(await Deno.readFile(path))
+	} else if (streamChunkSize > 0) {
+		const { readable } = await Deno.open(path)
+		return await Eml.fromReadable(readable.pipeThrough(new FixedChunkStream(streamChunkSize)))
+	} else {
+		return new Eml(await Deno.readFile(path))
+	}
 }
 
-export function getNodesIncrementally(str: string) {
-	const state = initialState()
-	for (const char of str) consume(char, state)
-	state.isEof = true
-	consume('', state)
-	return serializable(state.root)
+export function serializable<T>(x: T): T {
+	return JSON.parse(JSON.stringify(x))
 }

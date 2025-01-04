@@ -2,7 +2,7 @@ import { assertEquals, assertInstanceOf } from '@std/assert'
 import { basename } from '@std/path'
 import { concat } from '@std/bytes'
 import { Eml } from './eml.ts'
-import { hash, stubByEnvVar } from './_testUtils.ts'
+import { emlFromFilePath, hash } from './_testUtils.ts'
 
 const fixtures = {
 	sample: './src/_fixtures/sample.eml',
@@ -14,10 +14,8 @@ const fixtures = {
 }
 
 Deno.test(Eml.name, async (t) => {
-	using _ = stubByEnvVar()
-
 	await t.step(basename(fixtures.sample), async (t) => {
-		const eml = new Eml(await Deno.readFile('./src/_fixtures/sample.eml'))
+		const eml = await emlFromFilePath('./src/_fixtures/sample.eml')
 
 		await t.step('subject', () => {
 			const actual = eml.subject
@@ -79,7 +77,7 @@ Deno.test(Eml.name, async (t) => {
 	})
 
 	await t.step(basename(fixtures.sample_sans_html), async (t) => {
-		const eml = new Eml(await Deno.readFile(fixtures.sample_sans_html))
+		const eml = await emlFromFilePath(fixtures.sample_sans_html)
 
 		await t.step('messageText', () => {
 			assertEquals(
@@ -90,7 +88,7 @@ Deno.test(Eml.name, async (t) => {
 	})
 
 	await t.step(basename(fixtures.sample_sans_plain), async (t) => {
-		const eml = new Eml(await Deno.readFile(fixtures.sample_sans_plain))
+		const eml = await emlFromFilePath(fixtures.sample_sans_plain)
 
 		await t.step('messageText', () => {
 			assertEquals(
@@ -101,7 +99,7 @@ Deno.test(Eml.name, async (t) => {
 	})
 
 	await t.step(basename(fixtures.cc), async (t) => {
-		const eml = new Eml(await Deno.readFile(fixtures.cc))
+		const eml = await emlFromFilePath(fixtures.cc)
 
 		await t.step('to', () => {
 			assertEquals(eml.to, [
@@ -133,7 +131,7 @@ Deno.test(Eml.name, async (t) => {
 	})
 
 	await t.step(basename(fixtures.multipart), async (t) => {
-		const eml = new Eml(await Deno.readFile(fixtures.multipart))
+		const eml = await emlFromFilePath(fixtures.multipart)
 
 		await t.step('attachments', async () => {
 			const { attachments } = eml
@@ -160,7 +158,7 @@ Deno.test(Eml.name, async (t) => {
 	})
 
 	await t.step(basename(fixtures.attachment_filenames), async (t) => {
-		const eml = new Eml(await Deno.readFile(fixtures.attachment_filenames))
+		const eml = await emlFromFilePath(fixtures.attachment_filenames)
 
 		await t.step('attachments', () => {
 			const { attachments } = eml

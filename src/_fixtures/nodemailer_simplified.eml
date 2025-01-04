@@ -1,0 +1,54 @@
+From: Andris Kreata <andris@kreata.ee>
+To: Andris Reinman <andris+123@kreata.ee>, andris.reinman@gmail.com
+Subject: Simplified
+Date: Thu, 13 Oct 2016 11:39:48 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+ boundary="❤️❤️❤️"
+
+--❤️❤️❤️
+Content-Type: multipart/alternative;
+ boundary="💚💚💚"
+
+--💚💚💚
+Content-Type: text/plain
+Content-Transfer-Encoding: 7bit
+
+Hello to myself!
+--💚💚💚
+Content-Type: text/watch-html
+Content-Transfer-Encoding: 7bit
+
+<b>Hello</b> to myself
+--💚💚💚
+Content-Type: multipart/related;
+ boundary="💙💙💙"
+
+--💙💙💙
+Content-Type: text/html
+Content-Transfer-Encoding: quoted-printable
+
+<p>Hello</p>
+--💙💙💙
+Content-Type: text/plain;
+Content-Disposition: attachment;
+ filename=one.txt
+
+ONE
+--💙💙💙
+Content-Type: text/plain;
+Content-Disposition: attachment;
+ filename=two.txt
+
+TWO
+--💙💙💙--
+
+--💚💚💚--
+
+--❤️❤️❤️
+Content-Type: text/plain;
+Content-Disposition: attachment;
+ filename=three.txt
+
+THREE
+--❤️❤️❤️--

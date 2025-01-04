@@ -4,7 +4,6 @@ type QuotedPrintableProps = {
 	encoding: 'B' | 'Q'
 	charset?: string
 	content: string
-	// leadingWhitespace?: string
 }
 
 export function decodeQuotedPrintableContent({ charset, encoding, content }: QuotedPrintableProps) {

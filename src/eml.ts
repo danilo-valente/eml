@@ -1,15 +1,14 @@
 import { assert } from '@std/assert/assert'
-import { getNodes } from './walk.ts'
+import { getBodyNodes, getNodes, walkAndFindMatchingNodes } from './walk.ts'
 import type { CompoundNode, Node, SimpleNode } from './walk.ts'
 import { decodeQuotedPrintable, decodeQuotedPrintableContent } from './quotedPrintable.ts'
 import { unreachable } from '@std/assert/unreachable'
 import { htmlToPlainText, plainTextToHtml } from './html.ts'
 import { decodeBase64 } from '@std/encoding/base64'
-
-type Mailbox = {
-	name?: string
-	address: string
-}
+import { parseDateHeader, type ZonedDateTime } from './date.ts'
+import { type Mailbox, parseMailboxList } from './mailbox.ts'
+import { getNodesFromReadable } from './stream.ts'
+import { IS_NODE, PARSE_TO_NODES } from './_symbols.ts'
 
 type Attachment = {
 	filename: string
@@ -41,99 +40,6 @@ class Body {
 	}
 }
 
-const ISO = Symbol('iso')
-
-/**
- * Minimal interface for forward-compatibility with `Temporal.ZonedDateTime`.
- * - Example string representation: `2014-01-29T11:10:06+01:00[+01:00]`
- * - To convert to a real `Temporal.ZonedDateTime`, use `Temporal.ZonedDateTime.from(zonedDateTime.toString())`
- * - To convert to a `Temporal.Instant` (without time zone/offset information), use
- *   `Temporal.Instant.fromEpochMilliseconds(zonedDateTime.epochMilliseconds)`
- * - To convert to a `Date` (without time zone/offset information), use `new Date(zonedDateTime.epochMilliseconds)`
- */
-type ZonedDateTime = {
-	toString(): string
-	epochMilliseconds: number
-}
-
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
-
-function parseDateHeader(dateStr: string): ZonedDateTime {
-	const re = new RegExp(
-		String.raw`^(?:(?<dow>${DAY_NAMES.join('|')}),\s+)?(?<day>\d{1,2})\s+(?<month>${
-			MONTH_NAMES.join('|')
-		})\s+(?<year>\d{4})\s+(?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2})\s+(?<tz>[\-+]\d{4})$`,
-		'i',
-	)
-
-	const m = dateStr.match(re)
-
-	if (!m) unreachable()
-
-	const { day, month, year, hour, minute, second, tz } = m.groups!
-
-	const offset = tz.replace(/\d{2}$/, ':$&')
-
-	const isoSansTz = `${year}-${
-		String(MONTH_NAMES.indexOf(month as typeof MONTH_NAMES[number]) + 1).padStart(2, '0')
-	}-${day}T${hour}:${minute}:${second}${offset}`
-
-	const date = new Date(isoSansTz)
-	const pseudoTz = `[${offset}]`
-
-	const iso = isoSansTz + pseudoTz
-
-	return {
-		// @ts-expect-error Better `console.log` inspectability
-		[ISO]: iso,
-		epochMilliseconds: date.valueOf(),
-		toString: () => iso,
-	}
-}
-
-function getBodyNodes(root: CompoundNode): {
-	html: SimpleNode | null
-	plain: SimpleNode | null
-} {
-	const alternativeNode = root.children.find((x) =>
-		x.kind === 'compound' && x.meta.contentType === 'multipart/alternative'
-	)
-
-	if (alternativeNode != null) {
-		assert(alternativeNode.kind === 'compound')
-	}
-
-	const simpleNodes = (alternativeNode ?? root).children.filter((x) => x.kind === 'simple')
-
-	const html = simpleNodes.find((x) => x.kind === 'simple' && x.meta.contentType === 'text/html') ?? null
-	const plain = simpleNodes.find((x) => x.kind === 'simple' && x.meta.contentType === 'text/plain') ?? null
-
-	return { html, plain }
-}
-
-function walkAndFindMatchingNodes<T extends Node>(
-	node: Node,
-	predicate: (node: Node) => node is T,
-	acc: Node[] = [],
-): T[] {
-	switch (node.kind) {
-		case 'simple': {
-			if (predicate(node)) acc.push(node)
-			break
-		}
-		case 'compound': {
-			if (predicate(node)) acc.push(node)
-			for (const child of node.children) {
-				walkAndFindMatchingNodes(child, predicate, acc)
-			}
-			break
-		}
-	}
-
-	return acc as T[]
-}
-
 export class Eml {
 	from: [Mailbox, ...Mailbox[]]
 	replyTo: Mailbox[]
@@ -149,8 +55,9 @@ export class Eml {
 
 	attachments: Attachment[]
 
-	constructor(source: string | Uint8Array) {
-		const root = Eml.parseToNodes(source)
+	constructor(source: Uint8Array) {
+		// @ts-expect-error - passing Node to ctor is only supported internally
+		const root: Node = source[IS_NODE] ? source : Eml[PARSE_TO_NODES](source)
 
 		this.from = nonEmptyWithAssertion(parseMailboxList(root.headers.from))
 		this.replyTo = parseMailboxList(root.headers['reply-to'])
@@ -203,42 +110,14 @@ export class Eml {
 		this.body = new Body({ plain, html })
 	}
 
-	static parseToNodes(source: string | Uint8Array) {
-		let root = getNodes(typeof source === 'string' ? source : new TextDecoder().decode(source))
-
-		// TODO (perf): parse header sans body first to check charset; only parse body once charset is known
-		if (isNonUtf8Binary(root)) {
-			if (typeof source === 'string') {
-				throw new Error('Non-UTF8 charsets are not supported for string input')
-			}
-
-			root = getNodes(new TextDecoder(root.meta.charset).decode(source))
-		}
-
-		return root
+	static [PARSE_TO_NODES](bytes: Uint8Array) {
+		return getNodes(bytes)
 	}
-}
 
-function isNonUtf8Binary({ meta: { charset, encoding } }: Node) {
-	return charset != null && charset !== 'utf-8' && encoding !== 'quoted-printable' && encoding !== 'base64'
-}
-
-function parseMailboxList(str: string | undefined): Mailbox[] {
-	if (!str) return []
-
-	return str.split(',').map((x) => x.trim()).filter(Boolean)
-		.map((x) => {
-			x = decodeQuotedPrintable(x.trim())
-
-			const m = x.match(/^"?(?<name>[^"]*)"?\s*<(?<address>.*)>$/)
-
-			if (m) {
-				const { name, address } = m.groups!
-				return { name: name.trim(), address: address.trim() }
-			} else {
-				return { address: x }
-			}
-		})
+	static async fromReadable(readable: ReadableStream<Uint8Array>) {
+		// @ts-expect-error - passing Node to ctor is only supported internally
+		return new Eml(await getNodesFromReadable(readable))
+	}
 }
 
 function nonEmptyWithAssertion<T>(arr: T[]): [T, ...T[]] {
