@@ -2,20 +2,20 @@ import { assertEquals, assertInstanceOf } from '@std/assert'
 import { basename } from '@std/path'
 import { concat } from '@std/bytes'
 import { Eml } from './eml.ts'
-import { emlFromFilePath, hash } from './_testUtils.ts'
+import { emlFromFilePath, hash } from './_test/testUtils.ts'
 
 const fixtures = {
-	sample: './src/_fixtures/sample.eml',
-	sample_sans_html: './src/_fixtures/sample_sans_html.eml',
-	sample_sans_plain: './src/_fixtures/sample_sans_plain.eml',
-	cc: './src/_fixtures/cc.eml',
-	multipart: './src/_fixtures/multipart.eml',
-	attachment_filenames: './src/_fixtures/attachment_filenames.eml',
+	sample: './src/_test/fixtures/sample.eml',
+	sample_sans_html: './src/_test/fixtures/sample_sans_html.eml',
+	sample_sans_plain: './src/_test/fixtures/sample_sans_plain.eml',
+	cc: './src/_test/fixtures/cc.eml',
+	multipart: './src/_test/fixtures/multipart.eml',
+	attachment_filenames: './src/_test/fixtures/attachment_filenames.eml',
 }
 
 Deno.test(Eml.name, async (t) => {
 	await t.step(basename(fixtures.sample), async (t) => {
-		const eml = await emlFromFilePath('./src/_fixtures/sample.eml')
+		const eml = await emlFromFilePath('./src/_test/fixtures/sample.eml')
 
 		await t.step('subject', () => {
 			const actual = eml.subject

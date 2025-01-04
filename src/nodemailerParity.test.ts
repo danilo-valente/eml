@@ -1,12 +1,12 @@
 import { assertEquals } from '@std/assert'
 import { Eml } from './eml.ts'
-import { emlFromFilePath, hash } from './_testUtils.ts'
+import { emlFromFilePath, hash } from './_test/testUtils.ts'
 import { concat } from '@std/bytes/concat'
 import { decodeBase64 } from '@std/encoding/base64'
 import { PARSE_TO_NODES } from './_symbols.ts'
 
 Deno.test('Parse simplified message', async () => {
-	const eml = await emlFromFilePath('./src/_fixtures/nodemailer_simplified.eml')
+	const eml = await emlFromFilePath('./src/_test/fixtures/nodemailer_simplified.eml')
 
 	assertEquals(eml.attachments, [
 		{
@@ -28,7 +28,7 @@ Deno.test('Parse simplified message', async () => {
 })
 
 Deno.test('Parse message', async () => {
-	const eml = await emlFromFilePath('./src/_fixtures/nodemailer.eml')
+	const eml = await emlFromFilePath('./src/_test/fixtures/nodemailer.eml')
 
 	assertEquals(eml.attachments.length, 3)
 	assertEquals(await hash(eml.attachments[1].content), '2822cbcf68de083b96ac3921d0e308a2')
@@ -50,13 +50,13 @@ Deno.test('Parse message', async () => {
 })
 
 Deno.test('Parse message with large plaintext content', async () => {
-	const eml = await emlFromFilePath('./src/_fixtures/large_text.eml')
+	const eml = await emlFromFilePath('./src/_test/fixtures/large_text.eml')
 
 	assertEquals(eml.body.plain.length, 1_176_738)
 })
 
 Deno.test('Parse spam message', async () => {
-	const eml = await emlFromFilePath('./src/_fixtures/spam.eml')
+	const eml = await emlFromFilePath('./src/_test/fixtures/spam.eml')
 
 	assertEquals(eml.body.plain.length, 857)
 })

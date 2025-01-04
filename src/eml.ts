@@ -1,5 +1,5 @@
 import { assert } from '@std/assert/assert'
-import { getBodyNodes, getNodes, walkAndFindMatchingNodes } from './walk.ts'
+import { type AnyNode, getBodyNodes, getNodes, walkAndFindMatchingNodes } from './walk.ts'
 import { CompoundNode, Node, SimpleNode } from './walk.ts'
 import { decodeQuotedPrintable, decodeQuotedPrintableContent } from './quotedPrintable.ts'
 import { htmlToPlainText, plainTextToHtml } from './html.ts'
@@ -19,10 +19,10 @@ class Body {
 	#plain: string | undefined
 	#html: string | undefined
 
-	get plain() {
+	get plain(): string {
 		return this.#plain ??= htmlToPlainText(this.#html ?? '')
 	}
-	get html() {
+	get html(): string {
 		return this.#html ??= plainTextToHtml(this.#plain ?? '')
 	}
 
@@ -31,7 +31,7 @@ class Body {
 		this.#html = html
 	}
 
-	toJSON() {
+	toJSON(): { plain: string; html: string } {
 		return {
 			plain: this.plain,
 			html: this.html,
@@ -103,11 +103,11 @@ export class Eml {
 		this.body = new Body({ plain, html })
 	}
 
-	static [PARSE_TO_NODES](bytes: Uint8Array) {
+	static [PARSE_TO_NODES](bytes: Uint8Array): AnyNode {
 		return getNodes(bytes)
 	}
 
-	static async read(readable: ReadableStream<Uint8Array>) {
+	static async read(readable: ReadableStream<Uint8Array>): Promise<Eml> {
 		// @ts-expect-error - passing Node to ctor is only supported internally
 		return new Eml(await getNodesFromReadable(readable))
 	}

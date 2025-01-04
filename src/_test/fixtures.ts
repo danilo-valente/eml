@@ -1,6 +1,6 @@
-import type { AnyNode } from './walk.ts'
+import type { AnyNode } from '../walk.ts'
 
-export const FIXTURES_DIR = './src/_fixtures'
+export const FIXTURES_DIR = './src/_test/fixtures'
 
 type Fixture = {
 	fileName: string

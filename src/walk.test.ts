@@ -1,8 +1,8 @@
 import { assertEquals } from '@std/assert'
 import { join } from '@std/path'
 import { getNodes } from './walk.ts'
-import { fixtures, FIXTURES_DIR } from './_fixtures.ts'
-import { serializable } from './_testUtils.ts'
+import { fixtures, FIXTURES_DIR } from './_test/fixtures.ts'
+import { serializable } from './_test/testUtils.ts'
 
 Deno.test(getNodes.name, async (t) => {
 	for (const fixture of fixtures) {

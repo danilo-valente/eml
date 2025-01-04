@@ -1,8 +1,8 @@
 import { encodeHex } from '@std/encoding/hex'
 import { crypto } from '@std/crypto'
-import { Eml } from './eml.ts'
+import { Eml } from '../eml.ts'
 import { FixedChunkStream } from '@std/streams/unstable-fixed-chunk-stream'
-import { PARSE_TO_NODES } from './_symbols.ts'
+import { PARSE_TO_NODES } from '../_symbols.ts'
 
 export async function hash(bytes: Uint8Array) {
 	return encodeHex(await crypto.subtle.digest('MD5', bytes))
@@ -14,7 +14,7 @@ export async function emlFromFilePath(path: string): Promise<Eml> {
 	if (streamChunkSize < 0) {
 		const chunkSize = Math.abs(streamChunkSize)
 
-		const { initialState, consume } = await import('./walk.ts')
+		const { initialState, consume } = await import('../walk.ts')
 		const { stub } = await import('@std/testing/mock')
 
 		using _ = stub(Eml, PARSE_TO_NODES, function getNodesIncrementallyPerChar(bytes) {

@@ -1,7 +1,7 @@
 import { assertEquals } from '@std/assert'
 import { join } from '@std/path'
-import { fixtures, FIXTURES_DIR } from './_fixtures.ts'
-import { serializable } from './_testUtils.ts'
+import { fixtures, FIXTURES_DIR } from './_test/fixtures.ts'
+import { serializable } from './_test/testUtils.ts'
 import { getNodesFromReadable } from './stream.ts'
 
 Deno.test(getNodesFromReadable.name, async (t) => {

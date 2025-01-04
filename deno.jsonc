@@ -1,9 +1,14 @@
 {
 	"lock": false,
+	"name": "@li/eml",
+	"version": "0.0.0",
+	"exports": {
+		".": "./src/mod.ts"
+	},
 	"tasks": {
 		"dev": "deno run --watch main.ts",
 		"test": "deno test -A",
-		"test-stub": "STREAM_CHUNK_SIZE=1 deno test -A"
+		"test-stub": "STREAM_CHUNK_SIZE=888 deno test -A"
 	},
 	"imports": {
 		"@std/assert": "jsr:@std/assert@1",
@@ -27,6 +32,13 @@
 		"include": [
 			"**/*.ts",
 			"**/*.jsonc"
+		]
+	},
+	"publish": {
+		"exclude": [
+			"src/_test",
+			"src/*.test.ts",
+			".vscode"
 		]
 	}
 }
