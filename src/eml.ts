@@ -7,7 +7,6 @@ import { decodeBase64 } from '@std/encoding/base64'
 import { parseDateHeader, type ZonedDateTime } from './date.ts'
 import { type Mailbox, parseMailboxList } from './mailbox.ts'
 import { getNodesFromReadable } from './stream.ts'
-import { PARSE_TO_NODES } from './_symbols.ts'
 
 type Attachment = {
 	filename: string
@@ -56,7 +55,7 @@ export class Eml {
 
 	constructor(bytes: Uint8Array) {
 		const input = bytes as Uint8Array | Node
-		const root: Node = input instanceof Node ? input : Eml[PARSE_TO_NODES](input)
+		const root: Node = input instanceof Node ? input : getNodes(input)
 
 		this.from = nonEmptyWithAssertion(parseMailboxList(root.headers.from))
 		this.replyTo = parseMailboxList(root.headers['reply-to'])
@@ -101,10 +100,6 @@ export class Eml {
 		}
 
 		this.body = new Body({ plain, html })
-	}
-
-	static [PARSE_TO_NODES](bytes: Uint8Array): AnyNode {
-		return getNodes(bytes)
 	}
 
 	static async read(readable: ReadableStream<Uint8Array>): Promise<Eml> {

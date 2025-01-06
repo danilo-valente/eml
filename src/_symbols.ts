@@ -2,4 +2,3 @@
 
 export const STATUS = Symbol('status')
 export const PARENT = Symbol('parent')
-export const PARSE_TO_NODES = Symbol('parseToNodes')

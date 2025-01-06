@@ -3,7 +3,7 @@ import { Eml } from './eml.ts'
 import { emlFromFilePath, hash } from './_test/testUtils.ts'
 import { concat } from '@std/bytes/concat'
 import { decodeBase64 } from '@std/encoding/base64'
-import { PARSE_TO_NODES } from './_symbols.ts'
+import { getNodes } from './walk.ts'
 
 Deno.test('Parse simplified message', async () => {
 	const eml = await emlFromFilePath('./src/_test/fixtures/nodemailer_simplified.eml')
@@ -107,6 +107,6 @@ test`)
 
 	assertEquals(eml.body.plain, 'test')
 
-	const node = Eml[PARSE_TO_NODES](source)
+	const node = getNodes(source)
 	assertEquals(node.meta.disposition, 'inline')
 })
