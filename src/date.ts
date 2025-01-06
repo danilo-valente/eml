@@ -36,7 +36,7 @@ export function parseDateHeader(dateStr: string): ZonedDateTime {
 
 	const isoSansTz = `${year}-${
 		String(MONTH_NAMES.indexOf(month as typeof MONTH_NAMES[number]) + 1).padStart(2, '0')
-	}-${day}T${hour}:${minute}:${second}${offset}`
+	}-${day.padStart(2, '0')}T${hour}:${minute}:${second}${offset}`
 
 	const date = new Date(isoSansTz)
 	const pseudoTz = `[${offset}]`
