@@ -26,9 +26,18 @@ export function parseDateHeader(dateStr: string): ZonedDateTime {
 		'i',
 	)
 
-	const m = dateStr.match(re) ?? new Date(dateStr)
+	const m = dateStr.match(re)
 
-	if (!m) unreachable()
+	if (!m) {
+		const date = new Date(dateStr);
+		const iso = date.toISOString();
+		return {
+			// @ts-expect-error Better logging inspectability
+			[ISO]: iso,
+			epochMilliseconds: date.valueOf(),
+			toString: () => iso,
+		}
+	}
 
 	const { day, month, year, hour, minute, second, tz } = m.groups!
 
