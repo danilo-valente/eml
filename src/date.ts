@@ -26,7 +26,7 @@ export function parseDateHeader(dateStr: string): ZonedDateTime {
 		'i',
 	)
 
-	const m = dateStr.match(re)
+	const m = dateStr.match(re) ?? new Date(dateStr)
 
 	if (!m) unreachable()
 
